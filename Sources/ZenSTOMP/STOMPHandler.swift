@@ -12,7 +12,8 @@ final class STOMPHandler: ChannelInboundHandler, RemovableChannelHandler {
     public typealias InboundIn = STOMPFramePart
     public typealias OutboundOut = STOMPFramePart
     private let onResponse: OnResponse
-    
+    private var response: STOMPFrame!
+
     init(onResponse: @escaping OnResponse) {
         self.onResponse = onResponse
     }
@@ -28,11 +29,9 @@ final class STOMPHandler: ChannelInboundHandler, RemovableChannelHandler {
         headers["subscription"] = subscription
         let head = STOMPFrameHead(command: .ACK, headers: headers)
         context.write(self.wrapOutboundOut(.head(head)), promise: nil)
-        context.write(self.wrapOutboundOut(.end(nil)), promise: nil)
+        context.writeAndFlush(self.wrapOutboundOut(.end(nil)), promise: nil)
     }
-    
-    private var response: STOMPFrame!
-    
+        
     public func channelRead(context: ChannelHandlerContext, data: NIOAny) {
         let frame = self.unwrapInboundIn(data)
         switch frame {

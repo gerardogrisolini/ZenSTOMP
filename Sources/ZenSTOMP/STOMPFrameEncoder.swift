@@ -34,7 +34,7 @@ final class STOMPFrameEncoder: ChannelOutboundHandler {
             }
             buffer.writeBytes([LINEFEED_BYTE])
             context.write(self.wrapOutboundOut(buffer), promise: promise)
-            print("REQUEST: \(head)")
+            debugPrint("REQUEST: \(head)")
         case .body(let body):
             context.write(self.wrapOutboundOut(body), promise: promise)
         case .end(_):

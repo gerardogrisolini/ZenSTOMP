@@ -6,15 +6,11 @@ import PackageDescription
 let package = Package(
     name: "ZenSTOMP",
     products: [
-        .library(
-            name: "ZenSTOMP",
-            targets: ["ZenSTOMP"]),
+        .library(name: "ZenSTOMP", targets: ["ZenSTOMP"]),
     ],
     dependencies: [
-        .package(url: "https://github.com/apple/swift-nio.git",
-                 from: "2.0.0"),
-        .package(url: "https://github.com/apple/swift-nio-ssl.git",
-                 from: "2.0.0"),
+        .package(url: "https://github.com/apple/swift-nio.git", from: "2.0.0"),
+        .package(url: "https://github.com/apple/swift-nio-ssl.git", from: "2.0.0"),
     ],
     targets: [
         .target(
@@ -26,8 +22,6 @@ let package = Package(
                 "NIOSSL"
             ]
         ),
-        .testTarget(
-            name: "ZenSTOMPTests",
-            dependencies: ["ZenSTOMP"]),
+        .testTarget(name: "ZenSTOMPTests", dependencies: ["ZenSTOMP"]),
     ]
 )
