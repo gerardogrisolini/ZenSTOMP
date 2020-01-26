@@ -21,7 +21,7 @@ stomp.onResponse = { response in
 }
 ```
 
-#### Make client
+#### Start client
 ```
 try stomp.start().wait()
 ```
