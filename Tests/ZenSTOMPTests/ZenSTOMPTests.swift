@@ -1,28 +1,36 @@
 import XCTest
+import NIO
 @testable import ZenSTOMP
 
 final class ZenSTOMPTests: XCTestCase {
     func testExample() {
-        let stomp = ZenSTOMP(host: "server.stomp.org", port: 61716)
-        stomp.onResponse = { response in
-            debugPrint("RESPONSE: \(response.head)")
+        let eventLoopGroup = MultiThreadedEventLoopGroup(numberOfThreads: System.coreCount)
+        
+        let stomp = ZenSTOMP(host: "server.stomp.org", port: 61716, eventLoopGroup: eventLoopGroup)
+        stomp.onMessage = { message in
+            debugPrint("MESSAGE: \(message.head)")
         }
-        XCTAssertNoThrow(try stomp.start().wait())
+        
+        do {
+            try stomp.start().wait()
 
-        stomp.connect(username: "admin", password: "admin")
-        sleep(1)
+            try stomp.connect(username: "admin", password: "admin").wait()
+            sleep(1)
 
-        /// SUBSCRIBE
-        stomp.subscribe(id: "1", destination: "/topic/test)
-        sleep(5)
-        stomp.unsubscribe(id: "1")
+            /// SUBSCRIBE
+            try stomp.subscribe(id: "1", destination: "/topic/test").wait()
+            sleep(5)
+            try stomp.unsubscribe(id: "1").wait()
 
-        /// SEND
-        stomp.send(destination: "/topic/test/send", payload: "IoT Gateway is alive".data(using: .utf8)!)
-        sleep(3)
+            /// SEND
+            try stomp.send(destination: "/topic/test/send", payload: "IoT Gateway is alive".data(using: .utf8)!).wait()
+            sleep(3)
 
-        stomp.disconnect()
-        stomp.stop()
+            try stomp.disconnect().wait()
+            try stomp.stop().wait()
+        } catch {
+            XCTFail(error.localizedDescription)
+        }
     }
 
     static var allTests = [

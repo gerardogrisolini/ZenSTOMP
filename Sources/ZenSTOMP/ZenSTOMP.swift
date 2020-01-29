@@ -10,21 +10,20 @@ import NIO
 import NIOSSL
 
 
-public typealias OnResponse = (STOMPFrame) -> ()
+public typealias STOMPMessage = (STOMPFrame) -> ()
 
 public class ZenSTOMP {
     private let host: String
     private let port: Int
     private let eventLoopGroup: EventLoopGroup
     private var channel: Channel!
-    public var onResponse: OnResponse = { _ in }
-    
+    public var onMessage: STOMPMessage = { _ in }
     private var sslClientHandler: NIOSSLClientHandler? = nil
     
-    init(host: String, port: Int, eventLoopGroup: EventLoopGroup? = nil) {
+    init(host: String, port: Int, eventLoopGroup: EventLoopGroup) {
         self.host = host
         self.port = port
-        self.eventLoopGroup = eventLoopGroup ?? MultiThreadedEventLoopGroup(numberOfThreads: System.coreCount)
+        self.eventLoopGroup = eventLoopGroup
     }
     
     public func addTLS(cert: String, key: String) throws {
@@ -41,11 +40,11 @@ public class ZenSTOMP {
         sslClientHandler = try NIOSSLClientHandler(context: sslContext, serverHostname: host)
     }
 
-    public func start(keepAlive: Int64 = 0) -> EventLoopFuture<Void> {
+    public func start(keepAlive: Int64 = 0, destination: String = "*", message: String? = nil) -> EventLoopFuture<Void> {
         let handlers: [ChannelHandler] = [
             STOMPFrameDecoder(),
             STOMPFrameEncoder(),
-            STOMPHandler(onResponse: self.onResponse)
+            STOMPHandler(onMessage: self.onMessage)
         ]
         
         return ClientBootstrap(group: eventLoopGroup)
@@ -65,27 +64,32 @@ public class ZenSTOMP {
             .map { channel -> () in
                 self.channel = channel
                 if keepAlive > 0 {
-                    self.keepAlive(time: TimeAmount.seconds(keepAlive))
+                    self.keepAlive(time: TimeAmount.seconds(keepAlive), destination: destination, message: message)
                 }
             }
     }
     
-    public func stop() {
+    public func stop() -> EventLoopFuture<Void> {
         channel.flush()
-        channel.close(promise: nil)
+        return channel.close()
     }
     
-    private func keepAlive(time: TimeAmount) {
+    private func keepAlive(time: TimeAmount, destination: String, message: String?) {
         channel.eventLoop.scheduleRepeatedAsyncTask(initialDelay: time, delay: time) { task -> EventLoopFuture<Void> in
             var headers = Dictionary<String, String>()
-            headers["destination"] = "*"
+            headers["destination"] = destination
             let head = STOMPFrameHead(command: .SEND, headers: headers)
             self.channel.write(STOMPFramePart.head(head), promise: nil)
+            if let messsage = message {
+                var buffer = self.channel.allocator.buffer(capacity: messsage.utf8.count)
+                buffer.writeString(messsage)
+                self.channel.write(STOMPFramePart.body(buffer), promise: nil)
+            }
             return self.channel.writeAndFlush(STOMPFramePart.end(nil))
         }
     }
 
-    public func connect(username: String, password: String, receipt: String? = nil) {
+    public func connect(username: String, password: String, receipt: String? = nil) -> EventLoopFuture<Void> {
         var headers = Dictionary<String, String>()
 //        headers["accept-version"] = "1.2"
 //        headers["heart-beat"] = "0,0"
@@ -96,20 +100,20 @@ public class ZenSTOMP {
         }
         let head = STOMPFrameHead(command: .CONNECT, headers: headers)
         channel.write(STOMPFramePart.head(head), promise: nil)
-        channel.writeAndFlush(STOMPFramePart.end(nil), promise: nil)
+        return channel.writeAndFlush(STOMPFramePart.end(nil))
     }
 
-    public func disconnect(receipt: String? = nil) {
+    public func disconnect(receipt: String? = nil) -> EventLoopFuture<Void> {
         var headers = Dictionary<String, String>()
         if let receipt = receipt {
             headers["receipt"] = receipt
         }
         let head = STOMPFrameHead(command: .DISCONNECT, headers: headers)
         channel.write(STOMPFramePart.head(head), promise: nil)
-        channel.writeAndFlush(STOMPFramePart.end(nil), promise: nil)
+        return channel.writeAndFlush(STOMPFramePart.end(nil))
     }
 
-    public func subscribe(id: String, destination: String, ack: String = "auto", receipt: String? = nil) {
+    public func subscribe(id: String, destination: String, ack: String = "auto", receipt: String? = nil) -> EventLoopFuture<Void> {
         var headers = Dictionary<String, String>()
         headers["destination"] = destination
         headers["ack"] = ack
@@ -119,10 +123,10 @@ public class ZenSTOMP {
         }
         let head = STOMPFrameHead(command: .SUBSCRIBE, headers: headers)
         channel.write(STOMPFramePart.head(head), promise: nil)
-        channel.writeAndFlush(STOMPFramePart.end(nil), promise: nil)
+        return channel.writeAndFlush(STOMPFramePart.end(nil))
     }
 
-    public func unsubscribe(id: String, receipt: String? = nil) {
+    public func unsubscribe(id: String, receipt: String? = nil) -> EventLoopFuture<Void> {
         var headers = Dictionary<String, String>()
         headers["id"] = id
         if let receipt = receipt {
@@ -130,10 +134,10 @@ public class ZenSTOMP {
         }
         let head = STOMPFrameHead(command: .UNSUBSCRIBE, headers: headers)
         channel.write(STOMPFramePart.head(head), promise: nil)
-        channel.writeAndFlush(STOMPFramePart.end(nil), promise: nil)
+        return channel.writeAndFlush(STOMPFramePart.end(nil))
     }
 
-    public func send(destination: String, payload: Data, contentType: String = "text/plain", transaction: String? = nil, receipt: String? = nil) {
+    public func send(destination: String, payload: Data, contentType: String = "text/plain", transaction: String? = nil, receipt: String? = nil) -> EventLoopFuture<Void> {
         let lenght = payload.count
         var headers = Dictionary<String, String>()
         headers["destination"] = destination
@@ -151,10 +155,10 @@ public class ZenSTOMP {
         var buffer = channel.allocator.buffer(capacity: payload.count)
         buffer.writeBytes(payload)
         channel.write(STOMPFramePart.body(buffer), promise: nil)
-        channel.writeAndFlush(STOMPFramePart.end(nil), promise: nil)
+        return channel.writeAndFlush(STOMPFramePart.end(nil))
     }
     
-    public func begin(transactionId: String, receipt: String? = nil) {
+    public func begin(transactionId: String, receipt: String? = nil) -> EventLoopFuture<Void> {
         var headers = Dictionary<String, String>()
         headers["transaction"] = transactionId
         if let receipt = receipt {
@@ -162,10 +166,10 @@ public class ZenSTOMP {
         }
         let head = STOMPFrameHead(command: .BEGIN, headers: headers)
         channel.write(STOMPFramePart.head(head), promise: nil)
-        channel.writeAndFlush(STOMPFramePart.end(nil), promise: nil)
+        return channel.writeAndFlush(STOMPFramePart.end(nil))
     }
 
-    public func commit(transaction: String, receipt: String? = nil) {
+    public func commit(transaction: String, receipt: String? = nil) -> EventLoopFuture<Void> {
         var headers = Dictionary<String, String>()
         headers["transaction"] = transaction
         if let receipt = receipt {
@@ -173,10 +177,10 @@ public class ZenSTOMP {
         }
         let head = STOMPFrameHead(command: .COMMIT, headers: headers)
         channel.write(STOMPFramePart.head(head), promise: nil)
-        channel.writeAndFlush(STOMPFramePart.end(nil), promise: nil)
+        return channel.writeAndFlush(STOMPFramePart.end(nil))
     }
     
-    public func ack(id: String, transaction: String?) {
+    public func ack(id: String, transaction: String?) -> EventLoopFuture<Void> {
         var headers = Dictionary<String, String>()
         headers["id"] = id
         if let transaction = transaction {
@@ -184,10 +188,10 @@ public class ZenSTOMP {
         }
         let head = STOMPFrameHead(command: .ACK, headers: headers)
         channel.write(STOMPFramePart.head(head), promise: nil)
-        channel.writeAndFlush(STOMPFramePart.end(nil), promise: nil)
+        return channel.writeAndFlush(STOMPFramePart.end(nil))
     }
 
-    public func nack(id: String, transaction: String?) {
+    public func nack(id: String, transaction: String?) -> EventLoopFuture<Void> {
         var headers = Dictionary<String, String>()
         headers["id"] = id
         if let transaction = transaction {
@@ -195,10 +199,10 @@ public class ZenSTOMP {
         }
         let head = STOMPFrameHead(command: .NACK, headers: headers)
         channel.write(STOMPFramePart.head(head), promise: nil)
-        channel.writeAndFlush(STOMPFramePart.end(nil), promise: nil)
+        return channel.writeAndFlush(STOMPFramePart.end(nil))
     }
     
-    public func abort(transaction: String, receipt: String? = nil) {
+    public func abort(transaction: String, receipt: String? = nil) -> EventLoopFuture<Void> {
         var headers = Dictionary<String, String>()
         headers["transaction"] = transaction
         if let receipt = receipt {
@@ -206,6 +210,6 @@ public class ZenSTOMP {
         }
         let head = STOMPFrameHead(command: .ABORT, headers: headers)
         channel.write(STOMPFramePart.head(head), promise: nil)
-        channel.writeAndFlush(STOMPFramePart.end(nil), promise: nil)
+        return channel.writeAndFlush(STOMPFramePart.end(nil))
     }
 }

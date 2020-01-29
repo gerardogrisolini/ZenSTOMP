@@ -11,11 +11,11 @@ import NIO
 final class STOMPHandler: ChannelInboundHandler, RemovableChannelHandler {
     public typealias InboundIn = STOMPFramePart
     public typealias OutboundOut = STOMPFramePart
-    private let onResponse: OnResponse
-    private var response: STOMPFrame!
+    private let onMessage: STOMPMessage
+    private var message: STOMPFrame!
 
-    init(onResponse: @escaping OnResponse) {
-        self.onResponse = onResponse
+    init(onMessage: @escaping STOMPMessage) {
+        self.onMessage = onMessage
     }
     
     public func channelActive(context: ChannelHandlerContext) {
@@ -36,7 +36,7 @@ final class STOMPHandler: ChannelInboundHandler, RemovableChannelHandler {
         let frame = self.unwrapInboundIn(data)
         switch frame {
         case .head(let responseHead):
-            response = STOMPFrame(head: responseHead)
+            message = STOMPFrame(head: responseHead)
             if responseHead.command == .MESSAGE,
                 let messageId = responseHead.headers["message-id"],
                 let subscription = responseHead.headers["subscription"] {
@@ -44,16 +44,22 @@ final class STOMPHandler: ChannelInboundHandler, RemovableChannelHandler {
             }
         case .body(var byteBuffer):
             if let bytes = byteBuffer.readBytes(length: byteBuffer.readableBytes) {
-                response.body += Data(bytes)
+                message.body += Data(bytes)
             }
         case .end(_):
-            onResponse(response)
+            onMessage(message)
             break
         }
     }
     
     public func handlerRemoved(context: ChannelHandlerContext) {
         print("STOMP handler removed.")
+
+        //TODO: implements autoreconnect
+        
+//        var headers = Dictionary<String, String>()
+//        headers["connection closed"] = messageId
+//        onMessage(.init(head: .init(command: .ERROR, headers: headers)))
     }
     
     public func errorCaught(context: ChannelHandlerContext, error: Error) {
