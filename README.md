@@ -43,7 +43,8 @@ try stomp.unsubscribe(id: "1").wait()
 
 #### Send message
 ```
-try stomp.send(destination: "/topic/alive", payload: "IoT Gateway is alive".data(using: .utf8)!, receipt: "ALIVE").wait()
+let payload = "IoT Gateway is alive".data(using: .utf8)!
+try stomp.send(destination: "/topic/alive", payload: payload).wait()
 ```
 
 #### Disconnect client
