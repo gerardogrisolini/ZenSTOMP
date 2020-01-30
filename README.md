@@ -28,30 +28,30 @@ try stomp.start().wait()
 
 #### Connect to server
 ```
-stomp.connect(username: "admin", password: "123456789")
+try stomp.connect(username: "admin", password: "123456789").wait()
 ```
 
 #### Subscibe topic
 ```
-stomp.subscribe(id: "1", destination: "/topic/test")
+try stomp.subscribe(id: "1", destination: "/topic/test").wait()
 ```
 
 #### Unsubscibe topic
 ```
-stomp.unsubscribe(id: "1")
+try stomp.unsubscribe(id: "1").wait()
 ```
 
 #### Send message
 ```
-stomp.send(destination: "/topic/alive", payload: "IoT Gateway is alive".data(using: .utf8)!, receipt: "ALIVE")
+try stomp.send(destination: "/topic/alive", payload: "IoT Gateway is alive".data(using: .utf8)!, receipt: "ALIVE").wait()
 ```
 
 #### Disconnect client
 ```
-stomp.disconnect()
+try stomp.disconnect().wait()
 ```
 
 #### Stop client
 ```
-stomp.stop()
+try stomp.stop().wait()
 ```
