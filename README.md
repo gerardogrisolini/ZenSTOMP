@@ -31,12 +31,12 @@ try stomp.start().wait()
 try stomp.connect(username: "admin", password: "123456789").wait()
 ```
 
-#### Subscibe topic
+#### Subscibe destination
 ```
 try stomp.subscribe(id: "1", destination: "/topic/test").wait()
 ```
 
-#### Unsubscibe topic
+#### Unsubscibe destination
 ```
 try stomp.unsubscribe(id: "1").wait()
 ```
