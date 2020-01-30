@@ -17,9 +17,11 @@ public class ZenSTOMP {
     private let port: Int
     private let eventLoopGroup: EventLoopGroup
     private var channel: Channel!
-    public var onMessage: STOMPMessage = { _ in }
     private var sslClientHandler: NIOSSLClientHandler? = nil
-    
+    private let handler = STOMPHandler()
+    public var onMessage: STOMPMessage = { _ in }
+    public var isConnected: Bool { return handler.isConnected }
+
     init(host: String, port: Int, eventLoopGroup: EventLoopGroup) {
         self.host = host
         self.port = port
@@ -41,10 +43,12 @@ public class ZenSTOMP {
     }
 
     public func start(keepAlive: Int64 = 0, destination: String = "*", message: String? = nil) -> EventLoopFuture<Void> {
+        handler.setReceiver(receiver: onMessage)
+        
         let handlers: [ChannelHandler] = [
             STOMPFrameDecoder(),
             STOMPFrameEncoder(),
-            STOMPHandler(onMessage: self.onMessage)
+            handler
         ]
         
         return ClientBootstrap(group: eventLoopGroup)

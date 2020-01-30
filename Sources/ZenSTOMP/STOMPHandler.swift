@@ -11,16 +11,21 @@ import NIO
 final class STOMPHandler: ChannelInboundHandler, RemovableChannelHandler {
     public typealias InboundIn = STOMPFramePart
     public typealias OutboundOut = STOMPFramePart
-    private let onMessage: STOMPMessage
+    public var isConnected: Bool
+    private var receiver: STOMPMessage? = nil
     private var message: STOMPFrame!
 
-    init(onMessage: @escaping STOMPMessage) {
-        self.onMessage = onMessage
+    init() {
+        isConnected = false
     }
     
+    func setReceiver(receiver: @escaping STOMPMessage) {
+        self.receiver = receiver
+    }
+
     public func channelActive(context: ChannelHandlerContext) {
         print("Client connected to \(context.remoteAddress!)")
-        context.fireChannelActive()
+        isConnected = true
     }
     
     private func ack(_ context: ChannelHandlerContext, _ messageId: String, _ subscription: String) {
@@ -47,19 +52,14 @@ final class STOMPHandler: ChannelInboundHandler, RemovableChannelHandler {
                 message.body += Data(bytes)
             }
         case .end(_):
-            onMessage(message)
+            receiver?(message)
             break
         }
     }
     
     public func handlerRemoved(context: ChannelHandlerContext) {
         print("STOMP handler removed.")
-
-        //TODO: implements autoreconnect
-        
-//        var headers = Dictionary<String, String>()
-//        headers["connection closed"] = messageId
-//        onMessage(.init(head: .init(command: .ERROR, headers: headers)))
+        isConnected = false
     }
     
     public func errorCaught(context: ChannelHandlerContext, error: Error) {
