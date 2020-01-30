@@ -22,7 +22,7 @@ public class ZenSTOMP {
     public var onMessage: STOMPMessage = { _ in }
     public var isConnected: Bool { return handler.isConnected }
 
-    init(host: String, port: Int, eventLoopGroup: EventLoopGroup) {
+    public init(host: String, port: Int, eventLoopGroup: EventLoopGroup) {
         self.host = host
         self.port = port
         self.eventLoopGroup = eventLoopGroup
