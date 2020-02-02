@@ -8,12 +8,6 @@
 import Foundation
 import NIO
 
-public enum STOMPPart<HeadT, BodyT> where HeadT : Equatable, BodyT : Equatable {
-    case head(HeadT)
-    case body(BodyT)
-    case end(Void?)
-}
-
 public enum Command: String {
     case ABORT, ACK, NACK, BEGIN, COMMIT, CONNECT, DISCONNECT, SEND, SUBSCRIBE, UNSUBSCRIBE // CLIENT
     case CONNECTED, MESSAGE, RECEIPT, ERROR // SERVER
@@ -33,4 +27,3 @@ public struct STOMPFrame: Equatable {
     public var body: Data = Data()
 }
 
-public typealias STOMPFramePart = STOMPPart<STOMPFrameHead, NIO.ByteBuffer>
