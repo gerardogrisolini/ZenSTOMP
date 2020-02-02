@@ -17,8 +17,6 @@ let package = Package(
             name: "ZenSTOMP",
             dependencies: [
                 "NIO",
-                "NIOHTTP1",
-                "NIOWebSocket",
                 "NIOSSL"
             ]
         ),
