@@ -10,11 +10,15 @@ import NIO
 import NIOSSL
 
 
+enum STOMPError : Error {
+    case connectionError
+}
+
 public class ZenSTOMP {
     private let host: String
     private let port: Int
     private let eventLoopGroup: EventLoopGroup
-    private var channel: Channel!
+    private var channel: Channel? = nil
     private var sslClientHandler: NIOSSLClientHandler? = nil
     private let handler = STOMPHandler()
 
@@ -22,8 +26,8 @@ public class ZenSTOMP {
     private var destination: String = "*"
     private var message: String? = nil
 
-    public var version: String = "1.2"
-    public var heartBeat: String = "0,0"
+    public var version: String? = nil // "1.2,1.1"
+    public var heartBeat: String? = nil // "8000,8000"
 
     public var onMessageReceived: STOMPMessageReceived? = nil
     public var onHandlerRemoved: STOMPHandlerRemoved? = nil
@@ -87,12 +91,24 @@ public class ZenSTOMP {
     }
     
     private func stop() -> EventLoopFuture<Void> {
+        guard let channel = channel else {
+            return eventLoopGroup.next().makeFailedFuture(STOMPError.connectionError)
+        }
+        
         channel.flush()
         return channel.close()
     }
+
+    private func send(frame: STOMPFrame) -> EventLoopFuture<Void> {
+        guard let channel = channel else {
+            return eventLoopGroup.next().makeFailedFuture(STOMPError.connectionError)
+        }
+        
+        return channel.writeAndFlush(frame)
+    }
     
     private func startKeepAlive() {
-        if !channel.isActive || keepAlive == 0 { return }
+        guard let channel = channel, keepAlive > 0 else { return }
 
         let time = TimeAmount.seconds(keepAlive)
         channel.eventLoop.scheduleRepeatedAsyncTask(initialDelay: time, delay: time) { task -> EventLoopFuture<Void> in
@@ -102,7 +118,7 @@ public class ZenSTOMP {
             if let body = self.message?.data(using: .utf8) {
                 frame.body = body
             }
-            return self.channel.writeAndFlush(frame)
+            return self.send(frame: frame)
         }
     }
 
@@ -117,7 +133,7 @@ public class ZenSTOMP {
                 headers["receipt"] = receipt
             }
             let frame = STOMPFrame(head: STOMPFrameHead(command: .CONNECT, headers: headers))
-            return self.channel.writeAndFlush(frame).map { () -> () in
+            return self.send(frame: frame).map { () -> () in
                 self.startKeepAlive()
             }
         }
@@ -129,7 +145,7 @@ public class ZenSTOMP {
             headers["receipt"] = receipt
         }
         let frame = STOMPFrame(head: STOMPFrameHead(command: .DISCONNECT, headers: headers))
-        return channel.writeAndFlush(frame).flatMap { () -> EventLoopFuture<Void> in
+        return self.send(frame: frame).flatMap { () -> EventLoopFuture<Void> in
             return self.stop()
         }
     }
@@ -143,7 +159,7 @@ public class ZenSTOMP {
             headers["receipt"] = receipt
         }
         let frame = STOMPFrame(head: STOMPFrameHead(command: .SUBSCRIBE, headers: headers))
-        return channel.writeAndFlush(frame)
+        return self.send(frame: frame)
     }
 
     public func unsubscribe(id: String, receipt: String? = nil) -> EventLoopFuture<Void> {
@@ -153,7 +169,7 @@ public class ZenSTOMP {
             headers["receipt"] = receipt
         }
         let frame = STOMPFrame(head: STOMPFrameHead(command: .UNSUBSCRIBE, headers: headers))
-        return channel.writeAndFlush(frame)
+        return self.send(frame: frame)
     }
 
     public func send(destination: String, payload: Data, contentType: String = "text/plain", transaction: String? = nil, receipt: String? = nil) -> EventLoopFuture<Void> {
@@ -169,7 +185,7 @@ public class ZenSTOMP {
         headers["content-type"] = contentType
         headers["content-length"] = "\(lenght)"
         let frame = STOMPFrame(head: STOMPFrameHead(command: .SEND, headers: headers), body: payload)
-        return channel.writeAndFlush(frame)
+        return self.send(frame: frame)
     }
     
     public func begin(transactionId: String, receipt: String? = nil) -> EventLoopFuture<Void> {
@@ -179,7 +195,7 @@ public class ZenSTOMP {
             headers["receipt"] = receipt
         }
         let frame = STOMPFrame(head: STOMPFrameHead(command: .BEGIN, headers: headers))
-        return channel.writeAndFlush(frame)
+        return self.send(frame: frame)
     }
 
     public func commit(transaction: String, receipt: String? = nil) -> EventLoopFuture<Void> {
@@ -189,7 +205,7 @@ public class ZenSTOMP {
             headers["receipt"] = receipt
         }
         let frame = STOMPFrame(head: STOMPFrameHead(command: .COMMIT, headers: headers))
-        return channel.writeAndFlush(frame)
+        return self.send(frame: frame)
     }
     
     public func ack(id: String, transaction: String?) -> EventLoopFuture<Void> {
@@ -199,7 +215,7 @@ public class ZenSTOMP {
             headers["transaction"] = transaction
         }
         let frame = STOMPFrame(head: STOMPFrameHead(command: .ACK, headers: headers))
-        return channel.writeAndFlush(frame)
+        return self.send(frame: frame)
     }
 
     public func nack(id: String, transaction: String?) -> EventLoopFuture<Void> {
@@ -209,7 +225,7 @@ public class ZenSTOMP {
             headers["transaction"] = transaction
         }
         let frame = STOMPFrame(head: STOMPFrameHead(command: .NACK, headers: headers))
-        return channel.writeAndFlush(frame)
+        return self.send(frame: frame)
 
     }
     
@@ -220,7 +236,7 @@ public class ZenSTOMP {
             headers["receipt"] = receipt
         }
         let frame = STOMPFrame(head: STOMPFrameHead(command: .ABORT, headers: headers))
-        return channel.writeAndFlush(frame)
+        return self.send(frame: frame)
     }
 }
 

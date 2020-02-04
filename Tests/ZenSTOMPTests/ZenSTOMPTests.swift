@@ -14,11 +14,8 @@ final class ZenSTOMPTests: XCTestCase {
     }
 
     func testExample() {
-        let stomp = ZenSTOMP(host: "biesseprodnf-gwagent.cpaas-accenture.com", port: 61716, eventLoopGroup: eventLoopGroup)
-        XCTAssertNoThrow(try stomp.addTLS(
-            cert: "/Users/gerardo/Projects/ZenSTOMP/stunnel_client_neptune.pem.crt",
-            key: "/Users/gerardo/Projects/ZenSTOMP/stunnel_client.private_neptune.pem.key"
-        ))
+        let stomp = ZenSTOMP(host: "stomp.server.org", port: 61716, eventLoopGroup: eventLoopGroup)
+        XCTAssertNoThrow(try stomp.addTLS(cert: "certificate.crt", key: "private.key"))
         stomp.addKeepAlive(seconds: 30, destination: "/alive", message: "IoT Gateway is alive")
         stomp.onMessageReceived = { message in
             print(String(data: message.body, encoding: .utf8)!)
@@ -31,9 +28,9 @@ final class ZenSTOMPTests: XCTestCase {
         }
         
         do {
-            let destination = "/topic/test"
+            let destination = "test.123456.commands"
             
-            try stomp.connect(username: "admin", password: "Accenture.123!").wait()
+            try stomp.connect(username: "test", password: "test").wait()
             try stomp.subscribe(id: "1", destination: destination, ack: .client).wait()
             sleep(3)
 
