@@ -18,7 +18,7 @@ import ZenSTOMP
 let eventLoopGroup = MultiThreadedEventLoopGroup(numberOfThreads: System.coreCount)
 defer { try! eventLoopGroup.syncShutdownGracefully() }
 
-let stomp = ZenSTOMP(host: "www.stompserver.org", port: 61716, eventLoopGroup: eventLoopGroup)
+let stomp = ZenSTOMP(host: "www.stompserver.org", port: 61716, autoreconnect: false, eventLoopGroup: eventLoopGroup)
 try stomp.addTLS(cert: "certificate.crt", key: "private.key")
 stomp.addKeepAlive(seconds: 10, destination: "/alive", message: "IoT Gateway is alive")
 

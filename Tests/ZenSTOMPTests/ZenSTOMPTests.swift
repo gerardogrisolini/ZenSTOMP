@@ -14,7 +14,7 @@ final class ZenSTOMPTests: XCTestCase {
     }
 
     func testExample() {
-        let stomp = ZenSTOMP(host: "stomp.server.org", port: 61716, eventLoopGroup: eventLoopGroup)
+        let stomp = ZenSTOMP(host: "stomp.server.org", port: 61716, autoreconnect: true, eventLoopGroup: eventLoopGroup)
         XCTAssertNoThrow(try stomp.addTLS(cert: "certificate.crt", key: "private.key"))
         stomp.addKeepAlive(seconds: 30, destination: "/alive", message: "IoT Gateway is alive")
         stomp.onMessageReceived = { message in
