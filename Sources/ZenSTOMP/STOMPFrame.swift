@@ -26,4 +26,3 @@ public struct STOMPFrame: Equatable {
     public var head: STOMPFrameHead
     public var body: Data = Data()
 }
-

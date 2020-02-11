@@ -22,6 +22,10 @@ public class ZenSTOMP {
     private var sslContext: NIOSSLContext? = nil
     private let handler = STOMPHandler()
 
+    private var username: String?
+    private var password: String?
+    private var receipt: String?
+    private var topics = [String : Topic]()
     private var autoreconnect: Bool = false
     private var keepAlive: Int64 = 0
     private var destination: String = "*"
@@ -54,21 +58,31 @@ public class ZenSTOMP {
     }
 
     private func start() -> EventLoopFuture<Void> {
-        handler.messageReceived = onMessageReceived
-        handler.errorCaught = onErrorCaught
-        handler.handlerRemoved = {
-            if let onHandlerRemoved = self.onHandlerRemoved {
-                onHandlerRemoved()
-            }
-            
-            if self.autoreconnect {
-                self.stop().whenComplete { _ in
-                    self.reconnect().whenComplete { _ in }
-                }
-            }
-        }
         
-        return reconnect()
+        let handlers: [ChannelHandler] = [
+            MessageToByteHandler(STOMPFrameEncoder()),
+            ByteToMessageHandler(STOMPFrameDecoder()),
+            handler
+        ]
+        
+        return ClientBootstrap(group: eventLoopGroup)
+            // Enable SO_REUSEADDR.
+            .channelOption(ChannelOptions.socket(SocketOptionLevel(SOL_SOCKET), SO_REUSEADDR), value: 1)
+            .channelOption(ChannelOptions.socket(SocketOptionLevel(SOL_SOCKET), SO_KEEPALIVE), value: 1)
+            .channelInitializer { channel in
+                if let sslContext = self.sslContext {
+                    let sslClientHandler = try! NIOSSLClientHandler(context: sslContext, serverHostname: self.host)
+                    return channel.pipeline.addHandler(sslClientHandler).flatMap { () -> EventLoopFuture<Void> in
+                        channel.pipeline.addHandlers(handlers)
+                    }
+                } else {
+                    return channel.pipeline.addHandlers(handlers)
+                }
+        }
+        .connect(host: host, port: port)
+        .map { channel -> () in
+            self.channel = channel
+        }
     }
     
     private func stop() -> EventLoopFuture<Void> {
@@ -109,48 +123,44 @@ public class ZenSTOMP {
         self.message = message
     }
     
-    public func connect(username: String, password: String, receipt: String? = nil) -> EventLoopFuture<Void> {
+    public func reconnect(subscribe: Bool) -> EventLoopFuture<Void> {
         return start().flatMap { () -> EventLoopFuture<Void> in
             var headers = Dictionary<String, String>()
             headers["accept-version"] = self.version
             headers["heart-beat"] = self.heartBeat
-            headers["login"] = username
-            headers["passcode"] = password
-            if let receipt = receipt {
+            headers["login"] = self.username
+            headers["passcode"] = self.password
+            if let receipt = self.receipt {
                 headers["receipt"] = receipt
             }
             let frame = STOMPFrame(head: STOMPFrameHead(command: .CONNECT, headers: headers))
             return self.send(frame: frame).map { () -> () in
+                if subscribe { self.resubscribe() }
                 self.startKeepAlive()
             }
         }
     }
 
-    public func reconnect() -> EventLoopFuture<Void> {
-        let handlers: [ChannelHandler] = [
-            MessageToByteHandler(STOMPFrameEncoder()),
-            ByteToMessageHandler(STOMPFrameDecoder()),
-            handler
-        ]
-        
-        return ClientBootstrap(group: eventLoopGroup)
-            // Enable SO_REUSEADDR.
-            .channelOption(ChannelOptions.socket(SocketOptionLevel(SOL_SOCKET), SO_REUSEADDR), value: 1)
-            .channelOption(ChannelOptions.socket(SocketOptionLevel(SOL_SOCKET), SO_KEEPALIVE), value: 1)
-            .channelInitializer { channel in
-                if let sslContext = self.sslContext {
-                    let sslClientHandler = try! NIOSSLClientHandler(context: sslContext, serverHostname: self.host)
-                    return channel.pipeline.addHandler(sslClientHandler).flatMap { () -> EventLoopFuture<Void> in
-                        channel.pipeline.addHandlers(handlers)
-                    }
-                } else {
-                    return channel.pipeline.addHandlers(handlers)
+    public func connect(username: String, password: String, receipt: String? = nil) -> EventLoopFuture<Void> {
+        self.username = username
+        self.password = password
+        self.receipt = receipt
+
+        handler.messageReceived = onMessageReceived
+        handler.errorCaught = onErrorCaught
+        handler.handlerRemoved = {
+            if let onHandlerRemoved = self.onHandlerRemoved {
+                onHandlerRemoved()
+            }
+            
+            if self.autoreconnect {
+                self.stop().whenComplete { _ in
+                    self.reconnect(subscribe: true).whenComplete { _ in }
                 }
+            }
         }
-        .connect(host: host, port: port)
-        .map { channel -> () in
-            self.channel = channel
-        }
+        
+        return reconnect(subscribe: false)
     }
     
     public func disconnect(receipt: String? = nil) -> EventLoopFuture<Void> {
@@ -166,12 +176,29 @@ public class ZenSTOMP {
         }
     }
 
+    fileprivate func resubscribe() {
+        for topic in topics {
+            var headers = Dictionary<String, String>()
+            headers["destination"] = topic.value.destination
+            headers["ack"] = topic.value.ack.rawValue
+            headers["id"] = topic.key
+            if let receipt = topic.value.receipt {
+                headers["receipt"] = receipt
+            }
+            let frame = STOMPFrame(head: STOMPFrameHead(command: .SUBSCRIBE, headers: headers))
+            self.send(frame: frame).whenComplete { _ in }
+        }
+    }
+
     public func subscribe(id: String, destination: String, ack: Ack = .auto, receipt: String? = nil) -> EventLoopFuture<Void> {
+        let topic = Topic(destination: destination, ack: ack, receipt: receipt)
+        topics[id] = topic
+        
         var headers = Dictionary<String, String>()
-        headers["destination"] = destination
-        headers["ack"] = ack.rawValue
+        headers["destination"] = topic.destination
+        headers["ack"] = topic.ack.rawValue
         headers["id"] = id
-        if let receipt = receipt {
+        if let receipt = topic.receipt {
             headers["receipt"] = receipt
         }
         let frame = STOMPFrame(head: STOMPFrameHead(command: .SUBSCRIBE, headers: headers))
@@ -179,6 +206,9 @@ public class ZenSTOMP {
     }
 
     public func unsubscribe(id: String, receipt: String? = nil) -> EventLoopFuture<Void> {
+        
+        topics.removeValue(forKey: id)
+        
         var headers = Dictionary<String, String>()
         headers["id"] = id
         if let receipt = receipt {
@@ -260,4 +290,11 @@ public enum Ack : String {
     case auto = "auto"
     case client = "client"
     case clientIndividual = "client-individual"
+}
+
+
+public struct Topic {
+    public var destination: String
+    public var ack: Ack
+    public var receipt: String?
 }
