@@ -33,10 +33,10 @@ public class ZenSTOMP {
     public var onHandlerRemoved: STOMPHandlerRemoved? = nil
     public var onErrorCaught: STOMPErrorCaught? = nil
 
-    public init(host: String, port: Int, autoreconnect: Bool, eventLoopGroup: EventLoopGroup) {
+    public init(host: String, port: Int, reconnect: Bool, eventLoopGroup: EventLoopGroup) {
         self.host = host
         self.port = port
-        self.autoreconnect = autoreconnect
+        self.autoreconnect = reconnect
         self.eventLoopGroup = eventLoopGroup
     }
     
