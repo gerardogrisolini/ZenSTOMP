@@ -30,8 +30,8 @@ public class ZenSTOMP {
     private var keepAlive: Int64 = 0
     private var destination: String = "*"
     private var message: String? = nil
-    public var version: String? = nil // "1.2,1.1"
-    public var heartBeat: String? = nil // "8000,8000"
+    public var version: String = "1.2"
+    public var heartBeat: String = "8000,8000"
 
     public var onMessageReceived: STOMPMessageReceived? = nil
     public var onHandlerRemoved: STOMPHandlerRemoved? = nil
