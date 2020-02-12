@@ -91,7 +91,9 @@ public class ZenSTOMP {
         }
         
         channel.flush()
-        return channel.close(mode: .all)
+        return channel.close(mode: .all).map { () -> () in
+            channel = nil
+        }
     }
 
     private func send(frame: STOMPFrame) -> EventLoopFuture<Void> {
