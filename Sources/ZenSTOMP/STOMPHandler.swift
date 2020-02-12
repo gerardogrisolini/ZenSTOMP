@@ -32,7 +32,7 @@ final class STOMPHandler: ChannelInboundHandler, RemovableChannelHandler {
     public func channelRead(context: ChannelHandlerContext, data: NIOAny) {
         let frame = self.unwrapInboundIn(data)
 
-        debugPrint("channelRead: \(frame.head)")
+        //debugPrint("channelRead: \(frame.head)")
 
         if frame.head.command == .MESSAGE {
             if let id = frame.head.headers["ack"] {
