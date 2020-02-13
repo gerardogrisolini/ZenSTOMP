@@ -32,6 +32,8 @@ final class STOMPFrameDecoder: ByteToMessageDecoder {
     }
     
     public func parse(buffer: ByteBuffer) -> STOMPFrame? {
+        print(buffer.getString(at: 0, length: buffer.readableBytes))
+        
         var index = 0
         let count = buffer.readableBytes
         for i in 0..<count {

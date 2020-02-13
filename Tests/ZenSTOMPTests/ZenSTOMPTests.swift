@@ -54,7 +54,7 @@ final class ZenSTOMPTests: XCTestCase {
         var index = 0
         let count = buffer.count
         for i in 0..<count {
-            if i > 10 && buffer[i..<(i+2)] == Data([0x0a,0x0a]) {
+            if i > 5 && buffer[i..<(i+2)] == Data([0x0a,0x0a]) {
                 index = i + 2
                 break
             }
