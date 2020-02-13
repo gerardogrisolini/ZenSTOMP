@@ -18,9 +18,8 @@ final class STOMPFrameDecoder: ByteToMessageDecoder {
         guard buffer.readableBytes >= (1 + Int(count) + remainingLength) else { return .needMoreData }
         
         if let frame = parse(buffer: buffer) {
-            buffer.clear()
             context.fireChannelRead(self.wrapInboundOut(frame))
-
+            buffer.clear()
             return .continue
         } else {
             return .needMoreData
@@ -33,6 +32,10 @@ final class STOMPFrameDecoder: ByteToMessageDecoder {
     }
     
     private func parse(buffer: ByteBuffer) -> STOMPFrame? {
+        #if DEBUG
+        print("STOMP Client parse: \(buffer.getString(at: 0, length: buffer.readableBytes))")
+        #endif
+
         var index = 0
         let count = buffer.readableBytes
         for i in 0..<count {
@@ -44,6 +47,10 @@ final class STOMPFrameDecoder: ByteToMessageDecoder {
         
         if let string = buffer.getString(at: 0, length: index),
             let bytes = buffer.getBytes(at: index, length: count - index - 2) {
+            
+            #if DEBUG
+            print("STOMP Client header: \(string)")
+            #endif
             
             var head = STOMPFrameHead()
             let rows = string.split(separator: "\n", omittingEmptySubsequences: true)
