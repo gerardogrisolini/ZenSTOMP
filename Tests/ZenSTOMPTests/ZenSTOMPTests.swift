@@ -49,8 +49,50 @@ final class ZenSTOMPTests: XCTestCase {
             XCTFail(error.localizedDescription)
         }
     }
+    
+    func parse(buffer: Data) -> STOMPFrame? {
+        var index = 0
+        let count = buffer.count
+        for i in 0..<count {
+            if i > 10 && buffer[i..<(i+2)] == Data([0x0a,0x0a]) {
+                index = i + 2
+                break
+            }
+        }
+        
+        if let string = String(data: buffer[0...index], encoding: .utf8) {
+            let bytes = buffer[index...(count - 2)]
+            
+            var head = STOMPFrameHead()
+            let rows = string.split(separator: "\n", omittingEmptySubsequences: true)
+            for row in rows {
+                if row.contains(":") {
+                    let cols = row.split(separator: ":", maxSplits: 2, omittingEmptySubsequences: true)
+                    let key = cols[0].trimmingCharacters(in: .whitespacesAndNewlines)
+                    let value = cols[1].trimmingCharacters(in: .whitespacesAndNewlines)
+                    head.headers[key] = value
+                } else if let command = Command(rawValue: row.description) {
+                    head.command = command
+                }
+            }
+            
+            return STOMPFrame(head: head, body: Data(bytes))
+        }
+        
+        return nil
+    }
+    
+    func testParse() {
+        let buffer = """
+\n\n\nMESSAGE\nexpires:0\ndestination:/queue/.biesse.VIET_DEVICE.1000035065.commands\nsubscription:2\npriority:4\nbreadcrumbId:ID-localhost-32979-1581319115552-58-7993\nmessage-id:ID\\clocalhost-42526-1581319117547-69\\c3251\\c1\\c1\\c1\npersistent:true\ntimestamp:1581608995285\n\nIS CONFIG|ew0KICAiY21kIjogInVwbG9hZEJpZXNzZUxvZ0ZpbGUiDQp9\0\n
+""".data(using: .utf8)!
+        
+        _ = parse(buffer: buffer)
+    }
+
 
     static var allTests = [
         ("testExample", testExample),
+        ("testParse", testParse),
     ]
 }

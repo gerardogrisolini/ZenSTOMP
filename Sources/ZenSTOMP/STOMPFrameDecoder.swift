@@ -31,15 +31,11 @@ final class STOMPFrameDecoder: ByteToMessageDecoder {
         return .needMoreData
     }
     
-    private func parse(buffer: ByteBuffer) -> STOMPFrame? {
-        #if DEBUG
-        print("STOMP Client parse: \(buffer.getString(at: 0, length: buffer.readableBytes))")
-        #endif
-
+    public func parse(buffer: ByteBuffer) -> STOMPFrame? {
         var index = 0
         let count = buffer.readableBytes
         for i in 0..<count {
-            if buffer.getBytes(at: i, length: 2) == [0x0a,0x0a] {
+            if i > 5 && buffer.getBytes(at: i, length: 2) == [0x0a,0x0a] {
                 index = i + 2
                 break
             }
@@ -47,10 +43,6 @@ final class STOMPFrameDecoder: ByteToMessageDecoder {
         
         if let string = buffer.getString(at: 0, length: index),
             let bytes = buffer.getBytes(at: index, length: count - index - 2) {
-            
-            #if DEBUG
-            print("STOMP Client header: \(string)")
-            #endif
             
             var head = STOMPFrameHead()
             let rows = string.split(separator: "\n", omittingEmptySubsequences: true)
