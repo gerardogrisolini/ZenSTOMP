@@ -21,7 +21,8 @@ public class ZenSTOMP {
     private var channel: Channel? = nil
     private var sslContext: NIOSSLContext? = nil
     private let handler = STOMPHandler()
-
+    private var repeatedTask: RepeatedTask? = nil
+    
     private var username: String?
     private var password: String?
     private var receipt: String?
@@ -36,7 +37,7 @@ public class ZenSTOMP {
     public var onMessageReceived: STOMPMessageReceived? = nil
     public var onHandlerRemoved: STOMPHandlerRemoved? = nil
     public var onErrorCaught: STOMPErrorCaught? = nil
-
+    
     public init(host: String, port: Int, reconnect: Bool, eventLoopGroup: EventLoopGroup) {
         self.host = host
         self.port = port
@@ -86,6 +87,8 @@ public class ZenSTOMP {
     }
     
     private func stop() -> EventLoopFuture<Void> {
+        repeatedTask?.cancel()
+        
         guard let channel = channel else {
             return eventLoopGroup.next().makeFailedFuture(STOMPError.connectionError)
         }
@@ -105,10 +108,12 @@ public class ZenSTOMP {
     }
     
     private func startKeepAlive() {
+        repeatedTask?.cancel()
+        
         guard let channel = channel, keepAlive > 0 else { return }
 
         let time = TimeAmount.seconds(keepAlive)
-        channel.eventLoop.scheduleRepeatedAsyncTask(initialDelay: time, delay: time) { task -> EventLoopFuture<Void> in
+        repeatedTask = channel.eventLoop.scheduleRepeatedAsyncTask(initialDelay: time, delay: time) { task -> EventLoopFuture<Void> in
             var headers = Dictionary<String, String>()
             headers["destination"] = self.destination
             var frame = STOMPFrame(head: STOMPFrameHead(command: .SEND, headers: headers))
