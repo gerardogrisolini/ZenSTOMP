@@ -162,7 +162,7 @@ public class ZenSTOMP {
             
             if self.autoreconnect {
                 self.stop().whenComplete { _ in
-                    //sleep(5)
+                    sleep(1)
                     self.reconnect(subscribe: true).whenComplete { _ in }
                 }
             }
