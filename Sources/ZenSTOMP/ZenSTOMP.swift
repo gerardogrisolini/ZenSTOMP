@@ -145,6 +145,8 @@ public class ZenSTOMP {
                 if subscribe { self.resubscribe() }
                 self.startKeepAlive()
             }
+        }.flatMapError { err -> EventLoopFuture<Void> in
+            return self.eventLoopGroup.next().makeFailedFuture(err)
         }
     }
 
