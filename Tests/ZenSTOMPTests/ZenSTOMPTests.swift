@@ -24,7 +24,7 @@ final class ZenSTOMPTests: XCTestCase {
         ))
         stomp.addKeepAlive(seconds: 15, destination: "/topic/biesse/\(deviceType).\(deviceId).alive", message: "IoT Gateway is alive")
         stomp.onMessageReceived = { message in
-            //print(String(data: message.body, encoding: .utf8)!)
+            print(String(data: message.body, encoding: .utf8)!)
         }
         stomp.onHandlerRemoved = {
             print("Handler removed")

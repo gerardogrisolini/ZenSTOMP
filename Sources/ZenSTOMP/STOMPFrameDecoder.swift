@@ -24,6 +24,7 @@ final class STOMPFrameDecoder: ByteToMessageDecoder {
             for frame in frames {
                 context.fireChannelRead(self.wrapInboundOut(frame))
             }
+            context.fireChannelReadComplete()
             buffer.clear()
             return .continue
         } else {
@@ -56,7 +57,7 @@ final class STOMPFrameDecoder: ByteToMessageDecoder {
             let start = i == 0 ? 0 : indexes[i - 1]
             let index = indexes[i]
             
-            if let string = buffer.getString(at: start, length: index - start - 2) {
+            if let string = buffer.getString(at: start, length: index - start) {
 
                 var head = STOMPFrameHead()
                 let rows = string.split(separator: "\n", omittingEmptySubsequences: true)
@@ -77,9 +78,9 @@ final class STOMPFrameDecoder: ByteToMessageDecoder {
                 }
                 
                 if let bytes = buffer.getBytes(at: index, length: len) {
-                    print(string)
+                    //print("\n\n__________________")
+                    //print(string)
                     //print(String(bytes: bytes, encoding: .utf8)!)
-
                     frames.append(STOMPFrame(head: head, body: Data(bytes)))
                 }
             }
