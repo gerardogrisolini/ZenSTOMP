@@ -15,10 +15,15 @@ final class STOMPFrameDecoder: ByteToMessageDecoder {
         guard buffer.readableBytes >= 2 else { return .needMoreData }
 
         let (count, remainingLength) = try buffer.getRemainingLength(at: buffer.readerIndex + 1)
-        guard buffer.readableBytes >= (1 + Int(count) + remainingLength) else { return .needMoreData }
+        guard buffer.readableBytes >= (1 + Int(count) + remainingLength) else {
+            return .needMoreData
+        }
         
-        if let frame = parse(buffer: buffer) {
-            context.fireChannelRead(self.wrapInboundOut(frame))
+        let frames = parse(buffer: buffer)
+        if frames.count > 0 {
+            for frame in frames {
+                context.fireChannelRead(self.wrapInboundOut(frame))
+            }
             buffer.clear()
             return .continue
         } else {
@@ -31,38 +36,56 @@ final class STOMPFrameDecoder: ByteToMessageDecoder {
         return .needMoreData
     }
     
-    public func parse(buffer: ByteBuffer) -> STOMPFrame? {
-        //print(buffer.getString(at: 0, length: buffer.readableBytes))
-        
-        var index = 0
+    public func bodyIndexes(buffer: ByteBuffer) -> [Int] {
+        var indexes: [Int] = []
         let count = buffer.readableBytes
         for i in 0..<count {
             if i > 5 && buffer.getBytes(at: i, length: 2) == [0x0a,0x0a] {
-                index = i + 2
-                break
+                indexes.append(i + 2)
             }
         }
+        return indexes
+    }
+    
+    public func parse(buffer: ByteBuffer) -> [STOMPFrame] {
+        var frames = [STOMPFrame]()
         
-        if let string = buffer.getString(at: 0, length: index),
-            let bytes = buffer.getBytes(at: index, length: count - index - 2) {
+        let indexes = bodyIndexes(buffer: buffer)
+        for i in 0..<indexes.count {
             
-            var head = STOMPFrameHead()
-            let rows = string.split(separator: "\n", omittingEmptySubsequences: true)
-            for row in rows {
-                if row.contains(":") {
-                    let cols = row.split(separator: ":", maxSplits: 2, omittingEmptySubsequences: true)
-                    let key = cols[0].trimmingCharacters(in: .whitespacesAndNewlines)
-                    let value = cols[1].trimmingCharacters(in: .whitespacesAndNewlines)
-                    head.headers[key] = value
-                } else if let command = Command(rawValue: row.description) {
-                    head.command = command
+            let start = i == 0 ? 0 : indexes[i - 1]
+            let index = indexes[i]
+            
+            if let string = buffer.getString(at: start, length: index - start - 2) {
+
+                var head = STOMPFrameHead()
+                let rows = string.split(separator: "\n", omittingEmptySubsequences: true)
+                for row in rows {
+                    if row.contains(":") {
+                        let cols = row.split(separator: ":", maxSplits: 2, omittingEmptySubsequences: true)
+                        let key = cols[0].trimmingCharacters(in: .whitespacesAndNewlines)
+                        let value = cols[1].trimmingCharacters(in: .whitespacesAndNewlines)
+                        head.headers[key] = value
+                    } else if let command = Command(rawValue: row.description) {
+                        head.command = command
+                    }
+                }
+
+                var len = buffer.readableBytes - index - 2
+                if let l = head.headers["content-length"] {
+                    len = Int(l)!
+                }
+                
+                if let bytes = buffer.getBytes(at: index, length: len) {
+                    print(string)
+                    //print(String(bytes: bytes, encoding: .utf8)!)
+
+                    frames.append(STOMPFrame(head: head, body: Data(bytes)))
                 }
             }
-            
-            return STOMPFrame(head: head, body: Data(bytes))
         }
         
-        return nil
+        return frames
     }
 }
 

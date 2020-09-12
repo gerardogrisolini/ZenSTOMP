@@ -14,34 +14,44 @@ final class ZenSTOMPTests: XCTestCase {
     }
 
     func testExample() {
-        let stomp = ZenSTOMP(host: "test.stomp.org", port: 61716, reconnect: true, eventLoopGroup: eventLoopGroup)
-        XCTAssertNoThrow(try stomp.addTLS(cert: "certificate.crt", key: "private.key"))
-        //stomp.addKeepAlive(seconds: 30, destination: "/alive", message: "IoT Gateway is alive")
+        let deviceType = "VIET_DEVICE"
+        let deviceId = "6211298"
+        
+        let stomp = ZenSTOMP(host: "biesseprodnf-gwagent.cpaas-accenture.com", port: 61716, reconnect: true, eventLoopGroup: eventLoopGroup)
+        XCTAssertNoThrow(try stomp.addTLS(
+            cert: "/Users/gerardo/Projects/opcua/Assets/stunnel_client_neptune.pem.crt",
+            key: "/Users/gerardo/Projects/opcua/Assets/stunnel_client.private_neptune.pem.key"
+        ))
+        stomp.addKeepAlive(seconds: 15, destination: "/topic/biesse/\(deviceType).\(deviceId).alive", message: "IoT Gateway is alive")
         stomp.onMessageReceived = { message in
-            print(String(data: message.body, encoding: .utf8)!)
+            //print(String(data: message.body, encoding: .utf8)!)
         }
         stomp.onHandlerRemoved = {
             print("Handler removed")
         }
         stomp.onErrorCaught = { error in
-            print(error.localizedDescription)
+            print("error: \(error.localizedDescription)")
         }
         
         do {
-            let destination = "test.123456.commands"
+            let destination = ".biesse.\(deviceType).\(deviceId).commands"
             
-            try stomp.connect(username: "test", password: "test123").wait()
+            try stomp.connect(username: "admin", password: "Accenture.123!").wait()
             try stomp.subscribe(id: "1", destination: destination, ack: .client).wait()
-            sleep(3)
 
-            try stomp.send(destination: destination, payload: "Test message 1".data(using: .utf8)!).wait()
-            sleep(3)
-            try stomp.send(destination: destination, payload: "Test message 2 continue".data(using: .utf8)!).wait()
-            sleep(3)
-            try stomp.send(destination: destination, payload: "Test message 3 continue".data(using: .utf8)!).wait()
-            sleep(3)
-            try stomp.send(destination: destination, payload: "Test message 4 end".data(using: .utf8)!).wait()
-            sleep(3)
+            DispatchQueue.global(qos: .utility).async {
+                sleep(3)
+                do {
+                    try stomp.send(destination: destination, payload: "Test message 1".data(using: .utf8)!).wait()
+                    try stomp.send(destination: destination, payload: "Test message 2 continue".data(using: .utf8)!).wait()
+                    try stomp.send(destination: destination, payload: "Test message 3 continue".data(using: .utf8)!).wait()
+                    try stomp.send(destination: destination, payload: "Test message 4 end".data(using: .utf8)!).wait()
+                } catch {
+                    XCTFail(error.localizedDescription)
+                }
+            }
+
+            sleep(10)
 
             try stomp.unsubscribe(id: "1").wait()
             try stomp.disconnect().wait()
