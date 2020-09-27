@@ -19,8 +19,8 @@ final class ZenSTOMPTests: XCTestCase {
         
         let stomp = ZenSTOMP(host: "biesseprodnf-gwagent.cpaas-accenture.com", port: 61716, reconnect: true, eventLoopGroup: eventLoopGroup)
         XCTAssertNoThrow(try stomp.addTLS(
-            cert: "/Users/gerardo/Projects/opcua/Assets/stunnel_client_neptune.pem.crt",
-            key: "/Users/gerardo/Projects/opcua/Assets/stunnel_client.private_neptune.pem.key"
+            cert: "/Users/gerardo/Projects/opcua/opcua/Assets/stunnel_client_neptune.pem.crt",
+            key: "/Users/gerardo/Projects/opcua/opcua/Assets/stunnel_client.private_neptune.pem.key"
         ))
         stomp.addKeepAlive(seconds: 15, destination: "/topic/biesse/\(deviceType).\(deviceId).alive", message: "IoT Gateway is alive")
         stomp.onMessageReceived = { message in
@@ -40,12 +40,11 @@ final class ZenSTOMPTests: XCTestCase {
             try stomp.subscribe(id: "1", destination: destination, ack: .client).wait()
 
             DispatchQueue.global(qos: .utility).async {
-                sleep(3)
+                sleep(1)
                 do {
-                    try stomp.send(destination: destination, payload: "Test message 1".data(using: .utf8)!).wait()
-                    try stomp.send(destination: destination, payload: "Test message 2 continue".data(using: .utf8)!).wait()
-                    try stomp.send(destination: destination, payload: "Test message 3 continue".data(using: .utf8)!).wait()
-                    try stomp.send(destination: destination, payload: "Test message 4 end".data(using: .utf8)!).wait()
+                    for i in 0..<5000 {
+                        try stomp.send(destination: destination, payload: "Test message \(i)".data(using: .utf8)!).wait()
+                    }
                 } catch {
                     XCTFail(error.localizedDescription)
                 }
