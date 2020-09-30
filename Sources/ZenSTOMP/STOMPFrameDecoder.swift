@@ -44,16 +44,12 @@ final class STOMPFrameDecoder: ByteToMessageDecoder {
             }
             buffer.moveReaderIndex(forwardBy: len)
 
-            var lenght = buffer.readableBytes - len - 2
-            if let l = head.headers["content-length"] {
-                lenght = Int(l)!
-            }
-            
+            let lenght = Int(head.headers["content-length"] ?? buffer.readableBytes.description)!
             if let bytes = buffer.getBytes(at: buffer.readerIndex, length: lenght) {
                 buffer.moveReaderIndex(forwardBy: lenght)
-                //print("\n\n__________________")
-                //print(string)
-                //print(String(bytes: bytes, encoding: .utf8)!)
+//                print("\n\n__________________")
+//                print(string)
+//                print(String(bytes: bytes, encoding: .utf8)!)
                 return STOMPFrame(head: head, body: Data(bytes))
             }
         }

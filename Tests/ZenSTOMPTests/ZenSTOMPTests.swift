@@ -15,7 +15,7 @@ final class ZenSTOMPTests: XCTestCase {
 
     func testExample() {
         let deviceType = "VIET_DEVICE"
-        let deviceId = "6211298"
+        let deviceId = "1000037040"
         
         let stomp = ZenSTOMP(host: "biesseprodnf-gwagent.cpaas-accenture.com", port: 61716, reconnect: true, eventLoopGroup: eventLoopGroup)
         XCTAssertNoThrow(try stomp.addTLS(
@@ -37,20 +37,20 @@ final class ZenSTOMPTests: XCTestCase {
             let destination = ".biesse.\(deviceType).\(deviceId).commands"
             
             try stomp.connect(username: "admin", password: "Accenture.123!").wait()
-            try stomp.subscribe(id: "1", destination: destination, ack: .client).wait()
+            try stomp.subscribe(id: "1", destination: destination, ack: .auto).wait()
 
-            DispatchQueue.global(qos: .utility).async {
-                sleep(1)
-                do {
-                    for i in 0..<5000 {
-                        try stomp.send(destination: destination, payload: "Test message \(i)".data(using: .utf8)!).wait()
-                    }
-                } catch {
-                    XCTFail(error.localizedDescription)
-                }
-            }
+//            DispatchQueue.global(qos: .utility).async {
+//                sleep(2)
+//                //do {
+//                    for i in 0..<5 {
+//                        stomp.send(destination: destination, payload: "Test message \(i)".data(using: .utf8)!).whenComplete { _ in }
+//                    }
+//                //} catch {
+//                //    XCTFail(error.localizedDescription)
+//                //}
+//            }
 
-            sleep(10)
+            sleep(20)
 
             try stomp.unsubscribe(id: "1").wait()
             try stomp.disconnect().wait()
