@@ -9,8 +9,8 @@ let package = Package(
         .library(name: "ZenSTOMP", targets: ["ZenSTOMP"]),
     ],
     dependencies: [
-        .package(url: "https://github.com/apple/swift-nio.git", .branch("master")),
-        .package(url: "https://github.com/apple/swift-nio-ssl.git", .branch("master")),
+        .package(url: "https://github.com/apple/swift-nio.git", from: "2.23.0"),
+        .package(url: "https://github.com/apple/swift-nio-ssl.git", from: "2.9.2")
     ],
     targets: [
         .target(
