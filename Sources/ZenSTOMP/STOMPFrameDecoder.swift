@@ -27,9 +27,9 @@ final class STOMPFrameDecoder: ByteToMessageDecoder {
     }
     
     public func parse(buffer: inout ByteBuffer) -> STOMPFrame? {
-        guard let len = try? buffer.getRemainingLength(at: buffer.readerIndex) else { return  nil }
+        let len = buffer.getRemainingLength(at: buffer.readerIndex)
         
-        if let string = buffer.getString(at: buffer.readerIndex, length: len) {
+        if len > 0, let string = buffer.getString(at: buffer.readerIndex, length: len) {
             var head = STOMPFrameHead()
             let rows = string.split(separator: "\n", omittingEmptySubsequences: true)
             for row in rows {
@@ -47,9 +47,6 @@ final class STOMPFrameDecoder: ByteToMessageDecoder {
             let lenght = Int(head.headers["content-length"] ?? buffer.readableBytes.description)!
             if let bytes = buffer.getBytes(at: buffer.readerIndex, length: lenght) {
                 buffer.moveReaderIndex(forwardBy: lenght)
-//                print("\n\n__________________")
-//                print(string)
-//                print(String(bytes: bytes, encoding: .utf8)!)
                 return STOMPFrame(head: head, body: Data(bytes))
             }
         }
@@ -59,7 +56,7 @@ final class STOMPFrameDecoder: ByteToMessageDecoder {
 }
 
 extension ByteBuffer {
-    func getRemainingLength(at newReaderIndex: Int) throws -> Int {
+    func getRemainingLength(at newReaderIndex: Int) -> Int {
         for i in 0..<readableBytes {
             if i > 5 && getBytes(at: i, length: 2) == [0x0a,0x0a] {
                 return i + 2
@@ -67,9 +64,4 @@ extension ByteBuffer {
         }
         return 0
     }
-}
-
-public enum RemainingLengthError: Error {
-    case incomplete
-    case malformed
 }
