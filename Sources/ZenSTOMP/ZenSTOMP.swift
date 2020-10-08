@@ -68,12 +68,9 @@ public class ZenSTOMP {
         
         return ClientBootstrap(group: eventLoopGroup)
             // Enable SO_REUSEADDR.
-            .channelOption(ChannelOptions.socket(SocketOptionLevel(SOL_SOCKET), SO_REUSEADDR), value: 1)
-            .channelOption(ChannelOptions.socket(SocketOptionLevel(SOL_SOCKET), SO_KEEPALIVE), value: 1)
-            .channelOption(ChannelOptions.socket(IPPROTO_TCP, TCP_NODELAY), value: 1)
-            .channelOption(ChannelOptions.connectTimeout, value: TimeAmount.seconds(5))
-            .channelOption(ChannelOptions.maxMessagesPerRead, value: 16)
-            .channelOption(ChannelOptions.recvAllocator, value: AdaptiveRecvByteBufferAllocator())
+            .channelOption(ChannelOptions.socketOption(.so_reuseaddr), value: 1)
+            .channelOption(ChannelOptions.socketOption(.so_keepalive), value: 1)
+            .channelOption(ChannelOptions.connectTimeout, value: TimeAmount.seconds(10))
             .channelInitializer { channel in
                 if let sslContext = self.sslContext {
                     let sslClientHandler = try! NIOSSLClientHandler(context: sslContext, serverHostname: self.host)
@@ -124,6 +121,7 @@ public class ZenSTOMP {
             if let body = self.message?.data(using: .utf8) {
                 frame.body = body
             }
+            
             return self.send(frame: frame)
         }
     }

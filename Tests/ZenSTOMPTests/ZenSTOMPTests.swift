@@ -39,18 +39,18 @@ final class ZenSTOMPTests: XCTestCase {
             try stomp.connect(username: "admin", password: "Accenture.123!").wait()
             try stomp.subscribe(id: "1", destination: destination, ack: .auto).wait()
 
-//            DispatchQueue.global(qos: .utility).async {
-//                sleep(2)
-//                //do {
-//                    for i in 0..<5 {
-//                        stomp.send(destination: destination, payload: "Test message \(i)".data(using: .utf8)!).whenComplete { _ in }
-//                    }
-//                //} catch {
-//                //    XCTFail(error.localizedDescription)
-//                //}
-//            }
+            DispatchQueue.global(qos: .utility).async {
+                sleep(5)
+                //do {
+                    for i in 0..<5 {
+                        stomp.send(destination: destination, payload: "Test message \(i)".data(using: .utf8)!).whenComplete { _ in }
+                    }
+                //} catch {
+                //    XCTFail(error.localizedDescription)
+                //}
+            }
 
-            sleep(20)
+            sleep(60 * 5)
 
             try stomp.unsubscribe(id: "1").wait()
             try stomp.disconnect().wait()
