@@ -50,7 +50,7 @@ final class ZenSTOMPTests: XCTestCase {
                 //}
             }
 
-            sleep(60 * 5)
+            sleep(60 * 50)
 
             try stomp.unsubscribe(id: "1").wait()
             try stomp.disconnect().wait()

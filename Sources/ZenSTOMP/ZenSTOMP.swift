@@ -70,7 +70,7 @@ public class ZenSTOMP {
             // Enable SO_REUSEADDR.
             .channelOption(ChannelOptions.socketOption(.so_reuseaddr), value: 1)
             .channelOption(ChannelOptions.socketOption(.so_keepalive), value: 1)
-            .channelOption(ChannelOptions.connectTimeout, value: TimeAmount.seconds(10))
+            .channelOption(ChannelOptions.connectTimeout, value: TimeAmount.seconds(5))
             .channelInitializer { channel in
                 if let sslContext = self.sslContext {
                     let sslClientHandler = try! NIOSSLClientHandler(context: sslContext, serverHostname: self.host)
