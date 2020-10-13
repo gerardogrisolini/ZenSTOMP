@@ -9,6 +9,16 @@ import Foundation
 import NIO
 import NIOSSL
 
+public struct HeartBeat {
+    let send: Int
+    let recv: Int
+    var string: String { "\(send),\(recv)" }
+    
+    public init(send: Int = 0, recv: Int = 0) {
+        self.send = send
+        self.recv = recv
+    }
+}
 
 enum STOMPError : Error {
     case connectionError
@@ -32,15 +42,16 @@ public class ZenSTOMP {
     private var destination: String = "*"
     private var message: String? = nil
     public var version: String = "1.2"
-    public var heartBeat: String = "8000,8000"
+    public let heartBeat: HeartBeat
 
     public var onMessageReceived: STOMPMessageReceived? = nil
     public var onHandlerRemoved: STOMPHandlerRemoved? = nil
     public var onErrorCaught: STOMPErrorCaught? = nil
     
-    public init(host: String, port: Int, reconnect: Bool, eventLoopGroup: EventLoopGroup) {
+    public init(eventLoopGroup: EventLoopGroup, host: String, port: Int, heartBeat: HeartBeat = HeartBeat(), reconnect: Bool = true) {
         self.host = host
         self.port = port
+        self.heartBeat = heartBeat
         self.autoreconnect = reconnect
         self.eventLoopGroup = eventLoopGroup
     }
@@ -70,7 +81,10 @@ public class ZenSTOMP {
             // Enable SO_REUSEADDR.
             .channelOption(ChannelOptions.socketOption(.so_reuseaddr), value: 1)
             .channelOption(ChannelOptions.socketOption(.so_keepalive), value: 1)
-            .channelOption(ChannelOptions.connectTimeout, value: TimeAmount.seconds(5))
+            .channelOption(ChannelOptions.socketOption(.tcp_nodelay), value: 1)
+            .channelOption(ChannelOptions.maxMessagesPerRead, value: 16)
+            .channelOption(ChannelOptions.recvAllocator, value: AdaptiveRecvByteBufferAllocator())
+            .channelOption(ChannelOptions.connectTimeout, value: TimeAmount.seconds(8))
             .channelInitializer { channel in
                 if let sslContext = self.sslContext {
                     let sslClientHandler = try! NIOSSLClientHandler(context: sslContext, serverHostname: self.host)
@@ -114,15 +128,15 @@ public class ZenSTOMP {
         guard let channel = channel, keepAlive > 0 else { return }
 
         let time = TimeAmount.seconds(keepAlive)
-        repeatedTask = channel.eventLoop.scheduleRepeatedAsyncTask(initialDelay: time, delay: time) { task -> EventLoopFuture<Void> in
+        repeatedTask = channel.eventLoop.scheduleRepeatedTask(initialDelay: time, delay: time) { task -> () in
             var headers = Dictionary<String, String>()
             headers["destination"] = self.destination
             var frame = STOMPFrame(head: STOMPFrameHead(command: .SEND, headers: headers))
             if let body = self.message?.data(using: .utf8) {
                 frame.body = body
             }
-            
-            return self.send(frame: frame)
+            print(frame.head)
+            self.send(frame: frame).whenComplete { _ in }
         }
     }
 
@@ -136,7 +150,7 @@ public class ZenSTOMP {
         return start().flatMap { () -> EventLoopFuture<Void> in
             var headers = Dictionary<String, String>()
             headers["accept-version"] = self.version
-            headers["heart-beat"] = self.heartBeat
+            headers["heart-beat"] = self.heartBeat.string
             headers["login"] = self.username
             headers["passcode"] = self.password
             if let receipt = self.receipt {
