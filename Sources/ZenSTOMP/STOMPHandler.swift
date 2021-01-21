@@ -34,9 +34,9 @@ final class STOMPHandler: ChannelInboundHandler, RemovableChannelHandler {
     public func channelRead(context: ChannelHandlerContext, data: NIOAny) {
         let frame = self.unwrapInboundIn(data)
 
-        if frame.head.command == .CONNECTED {
-            print(frame.head.headers)
-        }
+//        if frame.head.command == .CONNECTED {
+//            print(frame.head.headers)
+//        }
 
         if frame.head.command == .MESSAGE {
             if let id = frame.head.headers["ack"] {
