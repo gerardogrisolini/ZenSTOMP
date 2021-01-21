@@ -127,15 +127,15 @@ public class ZenSTOMP {
         
         guard let channel = channel, keepAlive > 0 else { return }
 
+        var headers = Dictionary<String, String>()
+        headers["destination"] = self.destination
+        var frame = STOMPFrame(head: STOMPFrameHead(command: .SEND, headers: headers))
+        if let body = self.message?.data(using: .utf8) {
+            frame.body = body
+        }
+
         let time = TimeAmount.seconds(keepAlive)
         repeatedTask = channel.eventLoop.scheduleRepeatedTask(initialDelay: time, delay: time) { task -> () in
-            var headers = Dictionary<String, String>()
-            headers["destination"] = self.destination
-            var frame = STOMPFrame(head: STOMPFrameHead(command: .SEND, headers: headers))
-            if let body = self.message?.data(using: .utf8) {
-                frame.body = body
-            }
-            print(frame.head)
             self.send(frame: frame).whenComplete { _ in }
         }
     }
