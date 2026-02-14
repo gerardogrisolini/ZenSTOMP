@@ -32,10 +32,16 @@ public final class ZenSTOMP: @unchecked Sendable {
     private let host: String
     private let port: Int
     private let eventLoopGroup: EventLoopGroup
+
     private var channel: Channel? = nil
+    private var asyncChannel: NIOAsyncChannel<STOMPFrame, STOMPFrame>? = nil
     private var sslContext: NIOSSLContext? = nil
-    private let handler = STOMPHandler()
     private var repeatedTask: RepeatedTask? = nil
+    private var connectionTask: Task<Void, Never>? = nil
+
+    private let outboundWriterLock = NSLock()
+    private var outboundWriter: NIOAsyncChannelOutboundWriter<STOMPFrame>? = nil
+
     private let connectResponseTimeoutNanoseconds: UInt64 = 10_000_000_000
     private let connectWaiterLock = NSLock()
     private var connectWaiter: CheckedContinuation<Void, Error>?
@@ -48,6 +54,7 @@ public final class ZenSTOMP: @unchecked Sendable {
     private var keepAlive: Int64 = 0
     private var destination: String = "*"
     private var message: String? = nil
+
     public var version: String = "1.2"
     public var virtualHost: String? = nil
     public let heartBeat: HeartBeat
@@ -86,33 +93,89 @@ public final class ZenSTOMP: @unchecked Sendable {
         let host = self.host
         let port = self.port
         let sslContext = self.sslContext
-        let stompHandler = self.handler
 
-        let channel = try await ClientBootstrap(group: eventLoopGroup)
+        let asyncChannel = try await ClientBootstrap(group: eventLoopGroup)
             .channelOption(ChannelOptions.socketOption(.so_reuseaddr), value: 1)
             .channelOption(ChannelOptions.socketOption(.so_keepalive), value: 1)
             .channelOption(ChannelOptions.socketOption(.tcp_nodelay), value: 1)
             .channelOption(ChannelOptions.maxMessagesPerRead, value: 16)
             .channelOption(ChannelOptions.recvAllocator, value: AdaptiveRecvByteBufferAllocator())
             .channelOption(ChannelOptions.connectTimeout, value: TimeAmount.seconds(8))
-            .channelInitializer { channel in
-                do {
+            .connect(host: host, port: port) { channel in
+                channel.eventLoop.makeCompletedFuture {
                     if let sslContext {
                         let sslClientHandler = try NIOSSLClientHandler(context: sslContext, serverHostname: host)
                         try channel.pipeline.syncOperations.addHandler(sslClientHandler)
                     }
                     try channel.pipeline.syncOperations.addHandler(MessageToByteHandler(STOMPFrameEncoder()))
                     try channel.pipeline.syncOperations.addHandler(ByteToMessageHandler(STOMPFrameDecoder()))
-                    try channel.pipeline.syncOperations.addHandler(stompHandler)
-                    return channel.eventLoop.makeSucceededFuture(())
-                } catch {
-                    return channel.eventLoop.makeFailedFuture(error)
+                    return try NIOAsyncChannel<STOMPFrame, STOMPFrame>(wrappingChannelSynchronously: channel)
                 }
             }
-            .connect(host: host, port: port)
-            .get()
 
-        self.channel = channel
+        self.asyncChannel = asyncChannel
+        self.channel = asyncChannel.channel
+        startInboundProcessing(asyncChannel)
+    }
+
+    private func startInboundProcessing(_ asyncChannel: NIOAsyncChannel<STOMPFrame, STOMPFrame>) {
+        connectionTask?.cancel()
+
+        connectionTask = Task { [weak self] in
+            guard let self else { return }
+
+            do {
+                try await asyncChannel.executeThenClose { inbound, outbound in
+                    self.setOutboundWriter(outbound)
+                    defer { self.setOutboundWriter(nil) }
+
+                    for try await frame in inbound {
+                        self.handleInboundFrame(frame)
+                    }
+                }
+            } catch is CancellationError {
+                // ignore
+            } catch {
+                self.onErrorCaught?(error)
+                self.resumeConnectWaiter(.failure(error))
+            }
+
+            self.channel = nil
+            self.asyncChannel = nil
+            self.resumeConnectWaiter(.failure(STOMPError.connectionClosed))
+            self.onHandlerRemoved?()
+
+            if self.autoreconnect {
+                Task { [weak self] in
+                    guard let self else { return }
+                    try? await Task.sleep(nanoseconds: 3_000_000_000)
+                    try? await self.reconnect(subscribe: true)
+                }
+            }
+        }
+    }
+
+    private func handleInboundFrame(_ frame: STOMPFrame) {
+        switch frame.head.command {
+        case .CONNECTED:
+            resumeConnectWaiter(.success(()))
+
+        case .ERROR:
+            let message = frame.head.headers["message"] ?? String(data: frame.body, encoding: .utf8) ?? "STOMP ERROR"
+            resumeConnectWaiter(.failure(STOMPError.serverError(message)))
+
+        case .MESSAGE:
+            if let id = frame.head.headers["ack"] {
+                let transaction = frame.head.headers["transaction"]
+                Task { [weak self] in
+                    try? await self?.ack(id: id, transaction: transaction)
+                }
+            }
+            onMessageReceived?(frame)
+
+        default:
+            break
+        }
     }
 
     private func stop() async throws {
@@ -120,16 +183,37 @@ public final class ZenSTOMP: @unchecked Sendable {
         repeatedTask = nil
         resumeConnectWaiter(.failure(STOMPError.connectionClosed))
 
+        outboundWriter?.finish()
+
         guard let channel else {
             throw STOMPError.connectionError
         }
 
+        connectionTask?.cancel()
         channel.flush()
         try await channel.close(mode: .all).get()
         self.channel = nil
+        self.asyncChannel = nil
+    }
+
+    private func setOutboundWriter(_ writer: NIOAsyncChannelOutboundWriter<STOMPFrame>?) {
+        outboundWriterLock.lock()
+        outboundWriter = writer
+        outboundWriterLock.unlock()
+    }
+
+    private func getOutboundWriter() -> NIOAsyncChannelOutboundWriter<STOMPFrame>? {
+        outboundWriterLock.lock()
+        defer { outboundWriterLock.unlock() }
+        return outboundWriter
     }
 
     private func send(frame: STOMPFrame) async throws {
+        if let writer = getOutboundWriter() {
+            try await writer.write(frame)
+            return
+        }
+
         guard let channel else {
             throw STOMPError.connectionError
         }
@@ -192,31 +276,6 @@ public final class ZenSTOMP: @unchecked Sendable {
         self.username = username
         self.password = password
         self.receipt = receipt
-
-        handler.messageReceived = onMessageReceived
-        handler.errorCaught = onErrorCaught
-        handler.connected = { [weak self] _ in
-            self?.resumeConnectWaiter(.success(()))
-        }
-        handler.serverError = { [weak self] frame in
-            let message = frame.head.headers["message"] ?? String(data: frame.body, encoding: .utf8) ?? "STOMP ERROR"
-            self?.resumeConnectWaiter(.failure(STOMPError.serverError(message)))
-        }
-        handler.handlerRemoved = { [weak self] in
-            guard let self else { return }
-
-            self.resumeConnectWaiter(.failure(STOMPError.connectionClosed))
-            self.onHandlerRemoved?()
-
-            if self.autoreconnect {
-                Task { [weak self] in
-                    guard let self else { return }
-                    try? await Task.sleep(nanoseconds: 3_000_000_000)
-                    try? await self.reconnect(subscribe: true)
-                }
-            }
-        }
-
         try await reconnect(subscribe: false)
     }
 
@@ -356,9 +415,7 @@ public final class ZenSTOMP: @unchecked Sendable {
             }
 
             Task { [weak self] in
-                guard let self else {
-                    return
-                }
+                guard let self else { return }
 
                 do {
                     try await self.send(frame: frame)
